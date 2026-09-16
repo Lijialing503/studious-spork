@@ -1388,27 +1388,10 @@ svg {
 
     <section class="section">
       <div class="section-head"><div><h2>销售汇总</h2><p>新轮胎销售数量与金额</p></div></div>
-      <div class="segmented" style="margin-bottom:12px">
-        <button type="button" class="${homeSalesView === 'month' ? 'is-active' : ''}" data-action="toggle-sales-view" data-period="month">本月</button>
-        <button type="button" class="${homeSalesView === 'year' ? 'is-active' : ''}" data-action="toggle-sales-view" data-period="year">本年</button>
-      </div>
-      <article class="stat-card" style="background:var(--blue-soft);border-color:rgba(0,122,255,.18)">
-        <div class="label"><span>${homeSalesView === 'month' ? '本月' : '本年'}销售新胎总数</span><span class="mini-icon blue">${icon('tire')}</span></div>
-        <div class="value" style="color:var(--blue)">${integer(sales.totalQty)}<small> 条</small></div>
+      <article class="stat-card" style="background:var(--blue-soft);border-color:rgba(0,122,255,.18);cursor:pointer" data-action="show-tire-sales">
+        <div class="label"><span>新胎销售（${homeSalesView === 'month' ? '本月' : '本年'}）</span><span class="mini-icon blue">${icon('tire')}</span></div>
+        <div class="value" style="color:var(--blue)">${integer(sales.totalQty)}<small> 条 · 点击查看明细</small></div>
       </article>
-      <div class="stat-grid" style="margin-top:11px">
-        <article class="stat-card success"><div class="label"><span>销售金额</span></div><div class="value" style="font-size:18px">${money(sales.totalAmount)}</div></article>
-        <article class="stat-card"><div class="label"><span>销售笔数</span></div><div class="value" style="font-size:18px">${integer(sales.txCount)}<small> 笔</small></div></article>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-head"><div><h2>快捷操作</h2><p>快速完成出入库与记账</p></div></div>
-      <div class="quick-grid">
-        <button class="quick-action primary" type="button" data-action="stock-in"><span class="quick-icon">${icon('arrowDown')}</span><span>入库</span></button>
-        <button class="quick-action" type="button" data-action="stock-out"><span class="quick-icon">${icon('arrowUp')}</span><span>出库</span></button>
-        <button class="quick-action" type="button" data-action="go-accounting"><span class="quick-icon">${icon('money')}</span><span>记账</span></button>
-      </div>
     </section>
 
     ${low.length ? `<section class="section"><button class="alert-banner" type="button" data-action="show-low-stock"><span class="alert-icon">${icon('warning')}</span><span><strong>${low.length} 个品牌款库存不足</strong><small>少于 ${state.settings.lowStockThreshold} 条时自动提醒，点击查看</small></span><span class="chevron">${icon('chevron')}</span></button></section>` : ''}`;
@@ -1450,6 +1433,55 @@ svg {
     <div class="stat-grid" style="margin-bottom:12px">
       <article class="stat-card success"><div class="label"><span>已结清</span></div><div class="value" style="font-size:18px">${money(settled)}</div></article>
       <article class="stat-card danger"><div class="label"><span>挂账</span></div><div class="value" style="font-size:18px">${money(pending)}</div></article>
+    </div>
+    <div class="list-card">${listHtml}</div>
+    <div class="form-actions" style="margin-top:14px"><button class="button" type="button" data-action="close-sheet">关闭</button></div>`);
+  }
+
+  // ===== 新胎销售明细 =====
+  function showTireSalesDetail() {
+    const period = homeSalesView;
+    const now = new Date();
+    const prefix = period === 'year'
+      ? String(now.getFullYear())
+      : now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const periodLabel = period === 'year' ? `${now.getFullYear()}年` : new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long' }).format(now);
+    const records = state.accounting
+      .filter(a => a.type === 'income' && a.category === '新胎' && a.date && a.date.startsWith(prefix))
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    const totalQty = records.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+    const totalAmount = records.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const settledAmount = records.filter(r => r.paymentStatus === 'settled').reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const pendingAmount = records.filter(r => r.paymentStatus === 'pending').reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+    const listHtml = records.length ? records.map(r => {
+      let tireLabel = '未知轮胎';
+      if (r.productId && r.productId !== '__OTHER__') {
+        const p = productById(r.productId);
+        if (p) tireLabel = `${p.spec} · ${p.brand} · ${p.pattern}`;
+      } else if (r.otherSpec || r.otherBrand) {
+        tireLabel = `${r.otherSpec || ''} · ${r.otherBrand || ''}`;
+      } else if (r.note) {
+        tireLabel = r.note;
+      }
+      return `<div class="transaction-row" style="cursor:pointer" data-action="view-accounting-detail" data-id="${escapeHtml(r.id)}">
+        <span class="transaction-icon">${icon('tire')}</span>
+        <span class="transaction-main"><strong>${escapeHtml(tireLabel)}${r.vehicle ? ' · ' + escapeHtml(r.vehicle) : ''}</strong><small>${r.paymentStatus === 'settled' ? '已结清' : '挂账'} · ${formatDate(r.date)} · ${Number(r.quantity) || 0} 条</small></span>
+        <span class="transaction-count" style="color:var(--green)">+${money(r.amount)}</span>
+      </div>`;
+    }).join('') : `<div class="empty-state" style="padding:24px 12px"><span class="empty-icon">${icon('tire')}</span><strong>${periodLabel}暂无新胎销售记录</strong><p>在记账中记一笔"新胎"收入即可统计</p></div>`;
+
+    openSheet('新胎销售明细', periodLabel, `<div class="segmented" style="margin-bottom:12px">
+      <button type="button" class="${period === 'month' ? 'is-active' : ''}" data-action="toggle-sales-view" data-period="month">本月</button>
+      <button type="button" class="${period === 'year' ? 'is-active' : ''}" data-action="toggle-sales-view" data-period="year">本年</button>
+    </div>
+    <article class="stat-card" style="background:var(--blue-soft);border-color:rgba(0,122,255,.18);margin-bottom:11px">
+      <div class="label"><span>销售新胎总数</span><span class="mini-icon blue">${icon('tire')}</span></div>
+      <div class="value" style="color:var(--blue)">${integer(totalQty)}<small> 条</small></div>
+    </article>
+    <div class="stat-grid" style="margin-bottom:12px">
+      <article class="stat-card success"><div class="label"><span>已结清</span></div><div class="value" style="font-size:16px">${money(settledAmount)}</div></article>
+      <article class="stat-card danger"><div class="label"><span>挂账</span></div><div class="value" style="font-size:16px">${money(pendingAmount)}</div></article>
     </div>
     <div class="list-card">${listHtml}</div>
     <div class="form-actions" style="margin-top:14px"><button class="button" type="button" data-action="close-sheet">关闭</button></div>`);
@@ -2671,7 +2703,8 @@ svg {
     if (action === 'low-stock-setting') openLowStockSetting();
     if (action === 'export-sync-file') exportFullSyncFile();
     if (action === 'import-sync-file') openImportSyncFile();
-    if (action === 'toggle-sales-view') { homeSalesView = actionButton.dataset.period; render(); }
+    if (action === 'show-tire-sales') showTireSalesDetail();
+    if (action === 'toggle-sales-view') { homeSalesView = actionButton.dataset.period; showTireSalesDetail(); }
     if (action === 'view-transaction-detail') {
       const id = actionButton.dataset.id;
       const tx = state.transactions.find(t => t.id === id);
