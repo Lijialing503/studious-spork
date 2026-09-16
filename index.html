@@ -1125,6 +1125,7 @@ svg {
   let toastTimer = null;
   let pendingProductImage = '';
   let homeSalesView = 'month';
+  let homeSalesSelectedMonth = '';
 
   const main = document.getElementById('appMain');
   const sheetBackdrop = document.getElementById('sheetBackdrop');
@@ -1244,9 +1245,8 @@ svg {
 
   function tireSalesSummary(period = 'month') {
     const now = new Date();
-    const prefix = period === 'year'
-      ? String(now.getFullYear())
-      : now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const selMonth = homeSalesSelectedMonth || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+    const prefix = period === 'year' ? String(now.getFullYear()) : selMonth;
     const records = state.accounting.filter(a =>
       a.type === 'income' && a.category === '新胎' && a.date && a.date.startsWith(prefix)
     );
@@ -1366,6 +1366,9 @@ svg {
     const todayTxCount = state.transactions.filter(item => new Date(item.date).toDateString() === new Date().toDateString()).length
       + state.accounting.filter(item => new Date(item.date).toDateString() === new Date().toDateString()).length;
     const sales = tireSalesSummary(homeSalesView);
+    const salesPeriodLabel = homeSalesView === 'year' ? '本年'
+      : homeSalesSelectedMonth ? (() => { const [y, m] = homeSalesSelectedMonth.split('-'); const now = new Date(); return Number(y) === now.getFullYear() ? (Number(m) + '月') : (y + '年' + Number(m) + '月'); })()
+      : '本月';
 
     main.innerHTML = `${pageHeading('轮胎仓库', '库存、记账与欠款一目了然')}
     <section class="hero-card" aria-label="当前库存总量">
@@ -1389,7 +1392,7 @@ svg {
     <section class="section">
       <div class="section-head"><div><h2>销售汇总</h2><p>新轮胎销售数量与金额</p></div></div>
       <article class="stat-card" style="background:var(--blue-soft);border-color:rgba(0,122,255,.18);cursor:pointer" data-action="show-tire-sales">
-        <div class="label"><span>新胎销售（${homeSalesView === 'month' ? '本月' : '本年'}）</span><span class="mini-icon blue">${icon('tire')}</span></div>
+        <div class="label"><span>新胎销售（${salesPeriodLabel}）</span><span class="mini-icon blue">${icon('tire')}</span></div>
         <div class="value" style="color:var(--blue)">${integer(sales.totalQty)}<small> 条 · 点击查看明细</small></div>
       </article>
     </section>
@@ -1442,10 +1445,15 @@ svg {
   function showTireSalesDetail() {
     const period = homeSalesView;
     const now = new Date();
-    const prefix = period === 'year'
-      ? String(now.getFullYear())
-      : now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-    const periodLabel = period === 'year' ? `${now.getFullYear()}年` : new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long' }).format(now);
+    const selMonth = homeSalesSelectedMonth || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+    const prefix = period === 'year' ? String(now.getFullYear()) : selMonth;
+    let periodLabel;
+    if (period === 'year') {
+      periodLabel = `${now.getFullYear()}年`;
+    } else {
+      const [yy, mm] = selMonth.split('-');
+      periodLabel = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long' }).format(new Date(Number(yy), Number(mm) - 1, 1));
+    }
     const records = state.accounting
       .filter(a => a.type === 'income' && a.category === '新胎' && a.date && a.date.startsWith(prefix))
       .sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -1472,9 +1480,23 @@ svg {
     }).join('') : `<div class="empty-state" style="padding:24px 12px"><span class="empty-icon">${icon('tire')}</span><strong>${periodLabel}暂无新胎销售记录</strong><p>在记账中记一笔"新胎"收入即可统计</p></div>`;
 
     openSheet('新胎销售明细', periodLabel, `<div class="segmented" style="margin-bottom:12px">
-      <button type="button" class="${period === 'month' ? 'is-active' : ''}" data-action="toggle-sales-view" data-period="month">本月</button>
-      <button type="button" class="${period === 'year' ? 'is-active' : ''}" data-action="toggle-sales-view" data-period="year">本年</button>
+      <button type="button" class="${period === 'month' ? 'is-active' : ''}" data-action="toggle-sales-view" data-period="month">月度</button>
+      <button type="button" class="${period === 'year' ? 'is-active' : ''}" data-action="toggle-sales-view" data-period="year">年度</button>
     </div>
+    ${period === 'month' ? (() => {
+      const opts = [];
+      const n = new Date();
+      for (let i = 0; i < 24; i++) {
+        const d = new Date(n.getFullYear(), n.getMonth() - i, 1);
+        const val = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        const lbl = d.getFullYear() + '年' + (d.getMonth() + 1) + '月';
+        opts.push(`<option value="${val}"${val === selMonth ? ' selected' : ''}>${lbl}</option>`);
+      }
+      return `<div class="form-field" style="margin-bottom:12px">
+        <span>选择月份</span>
+        <select name="tireSalesMonth" style="width:100%;margin-top:6px;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--card);font-size:15px">${opts.join('')}</select>
+      </div>`;
+    })() : ''}
     <article class="stat-card" style="background:var(--blue-soft);border-color:rgba(0,122,255,.18);margin-bottom:11px">
       <div class="label"><span>销售新胎总数</span><span class="mini-icon blue">${icon('tire')}</span></div>
       <div class="value" style="color:var(--blue)">${integer(totalQty)}<small> 条</small></div>
@@ -2704,7 +2726,7 @@ svg {
     if (action === 'export-sync-file') exportFullSyncFile();
     if (action === 'import-sync-file') openImportSyncFile();
     if (action === 'show-tire-sales') showTireSalesDetail();
-    if (action === 'toggle-sales-view') { homeSalesView = actionButton.dataset.period; showTireSalesDetail(); }
+    if (action === 'toggle-sales-view') { homeSalesView = actionButton.dataset.period; homeSalesSelectedMonth = ''; showTireSalesDetail(); }
     if (action === 'view-transaction-detail') {
       const id = actionButton.dataset.id;
       const tx = state.transactions.find(t => t.id === id);
@@ -2877,6 +2899,10 @@ svg {
     if (event.target.name === 'incomeDetailDate') {
       const value = event.target.value;
       if (value) showIncomeDetailByDate(new Date(value + 'T00:00:00'));
+    }
+    if (event.target.name === 'tireSalesMonth') {
+      homeSalesSelectedMonth = event.target.value;
+      showTireSalesDetail();
     }
     if (event.target.name === 'recordsDate') {
       const value = event.target.value;

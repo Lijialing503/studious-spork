@@ -1,7 +1,7 @@
 ﻿// 轮胎仓库 Service Worker - 离线缓存
 // 缓存主文件，二次打开秒开
 
-const CACHE_NAME = 'tire-warehouse-v18';
+const CACHE_NAME = 'tire-warehouse-v19';
 const ASSETS = [ './', './index.html' ];
 
 // 安装：预缓存主文件
