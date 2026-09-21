@@ -335,9 +335,12 @@ svg {
   vertical-align: middle;
 }
 .pay-status-badge.paid { background: var(--green-soft); color: var(--green); }
-.pay-status-badge.unpaid { background: var(--orange-soft); color: var(--accent-strong); }
-.pay-status-badge.settled { background: var(--green-soft); color: var(--green); }
-.pay-status-badge.pending { background: var(--red-soft); color: var(--red); }
+  .pay-status-badge.unpaid { background: var(--orange-soft); color: var(--accent-strong); }
+  .pay-status-badge.settled { background: var(--green-soft); color: var(--green); }
+  .pay-status-badge.pending { background: var(--red-soft); color: var(--red); }
+  .pay-status-badge.warning { background: var(--orange-soft); color: var(--accent-strong); }
+  .pay-status-badge.success { background: var(--green-soft); color: var(--green); }
+  .pay-status-badge.info { background: var(--blue-soft); color: var(--blue); }
 
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .search-field { position: relative; flex: 1; }
@@ -507,6 +510,7 @@ svg {
 
 .segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border-radius: 12px; background: rgba(118,118,128,.12); }
 .segmented.three { grid-template-columns: 1fr 1fr 1fr; }
+  .segmented.four { grid-template-columns: 1fr 1fr 1fr 1fr; }
 .segmented button { min-height: 38px; border: 0; border-radius: 9px; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 650; cursor: pointer; }
 .segmented button.is-active { background: #fff; color: var(--text); box-shadow: 0 2px 7px rgba(0,0,0,.08); }
 
@@ -970,6 +974,7 @@ svg {
       { id: 'A1002', type: 'income', category: '动平衡', vehicle: '鲁B88888', paymentStatus: 'pending', amount: 200, note: '挂账', date: '2026-07-20T11:30:00+08:00' },
       { id: 'A1003', type: 'expense', category: '吃饭', expenseType: 'living', amount: 35, note: '午饭', date: '2026-07-20T12:30:00+08:00' }
     ],
+    warrantyTires: [],
     settings: {
       lowStockThreshold: 2
     },
@@ -1057,6 +1062,18 @@ svg {
         hidden: Boolean(record.hidden),
         isRepayment: Boolean(record.isRepayment),
         relatedDebtId: String(record.relatedDebtId || '')
+      })) : [],
+      warrantyTires: Array.isArray(safe.warrantyTires) ? safe.warrantyTires.map(w => ({
+        id: String(w.id || makeId('W')),
+        tireNo: String(w.tireNo || ''),
+        spec: String(w.spec || ''),
+        brand: String(w.brand || ''),
+        defect: String(w.defect || ''),
+        handler: String(w.handler || ''),
+        note: String(w.note || ''),
+        status: ['pending', 'reported', 'processing', 'done'].includes(w.status) ? w.status : 'pending',
+        createdAt: w.createdAt || nowISO(),
+        updatedAt: w.updatedAt || nowISO()
       })) : [],
       settings: {
         lowStockThreshold: Math.max(1, Number(safe.settings?.lowStockThreshold || 2))
@@ -1397,6 +1414,14 @@ svg {
       </article>
     </section>
 
+    <section class="section">
+      <div class="section-head"><div><h2>三包胎管理</h2><p>售后三包轮胎理赔跟踪</p></div></div>
+      <article class="stat-card" style="background:var(--blue-soft);border-color:rgba(0,122,255,.18);cursor:pointer" data-action="show-warranty">
+        <div class="label"><span>三包胎记录</span><span class="mini-icon blue">${icon('refresh')}</span></div>
+        <div class="value" style="color:var(--blue)">${state.warrantyTires.length}<small> 条 · ${state.warrantyTires.filter(w => w.status !== 'done').length} 条处理中 · 点击查看</small></div>
+      </article>
+    </section>
+
     ${low.length ? `<section class="section"><button class="alert-banner" type="button" data-action="show-low-stock"><span class="alert-icon">${icon('warning')}</span><span><strong>${low.length} 个品牌款库存不足</strong><small>少于 ${state.settings.lowStockThreshold} 条时自动提醒，点击查看</small></span><span class="chevron">${icon('chevron')}</span></button></section>` : ''}`;
   }
 
@@ -1509,7 +1534,85 @@ svg {
     <div class="form-actions" style="margin-top:14px"><button class="button" type="button" data-action="close-sheet">关闭</button></div>`);
   }
 
-  // ===== 视图渲染：库存 =====
+  // ===== 三包胎管理 =====
+  const WARRANTY_STATUS = {
+    pending: { label: '待处理', cls: 'warning' },
+    reported: { label: '已报修', cls: 'info' },
+    processing: { label: '处理中', cls: 'info' },
+    done: { label: '已完成', cls: 'success' }
+  };
+
+  function showWarrantyList() {
+    const items = state.warrantyTires.slice().sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    const listHtml = items.length ? items.map(w => {
+      const st = WARRANTY_STATUS[w.status] || WARRANTY_STATUS.pending;
+      return `<div class="transaction-row" style="cursor:pointer" data-action="edit-warranty" data-id="${escapeHtml(w.id)}">
+        <span class="transaction-icon">${icon('refresh')}</span>
+        <span class="transaction-main"><strong>${escapeHtml(w.spec)} · ${escapeHtml(w.brand)}</strong><small>胎号: ${escapeHtml(w.tireNo)} · ${escapeHtml(w.defect)}${w.handler ? ' · ' + escapeHtml(w.handler) : ''}</small></span>
+        <span class="pay-status-badge ${st.cls}">${st.label}</span>
+      </div>`;
+    }).join('') : `<div class="empty-state" style="padding:24px 12px"><span class="empty-icon">${icon('refresh')}</span><strong>暂无三包胎记录</strong><p>点击下方按钮新增一条三包胎记录</p></div>`;
+
+    openSheet('三包胎管理', '售后理赔跟踪', `<div class="list-card">${listHtml}</div>
+    <div class="form-actions" style="margin-top:14px">
+      <button class="button primary" type="button" data-action="add-warranty">${icon('plus')} 新增三包胎</button>
+      <button class="button" type="button" data-action="close-sheet">关闭</button>
+    </div>`);
+  }
+
+  function showWarrantyForm(warrantyId = '') {
+    const isEdit = !!warrantyId;
+    const w = isEdit ? state.warrantyTires.find(x => x.id === warrantyId) : null;
+    const tireNo = w?.tireNo || '';
+    const spec = w?.spec || '';
+    const brand = w?.brand || '';
+    const defect = w?.defect || '';
+    const handler = w?.handler || '';
+    const note = w?.note || '';
+    const status = w?.status || 'pending';
+
+    const statusButtons = Object.entries(WARRANTY_STATUS).map(([key, val]) =>
+      `<button type="button" class="${status === key ? 'is-active' : ''}" data-action="set-warranty-status" data-status="${key}">${val.label}</button>`
+    ).join('');
+
+    openSheet(isEdit ? '编辑三包胎' : '新增三包胎', '三包胎管理', `<form id="warrantyForm">
+      <input type="hidden" name="warrantyId" value="${escapeHtml(warrantyId)}">
+      <div class="form-field">
+        <span>胎号 *</span>
+        <input name="tireNo" required autofocus type="text" placeholder="如 DOT2024-0815" value="${escapeHtml(tireNo)}">
+      </div>
+      <div class="form-field">
+        <span>轮胎型号 *</span>
+        <input name="spec" required type="text" placeholder="如 11R22.5" value="${escapeHtml(spec)}">
+      </div>
+      <div class="form-field">
+        <span>品牌 *</span>
+        <input name="brand" required type="text" placeholder="如 朝阳" value="${escapeHtml(brand)}">
+      </div>
+      <div class="form-field">
+        <span>病象 *</span>
+        <input name="defect" required type="text" placeholder="如 胎冠起鼓、侧面裂纹" value="${escapeHtml(defect)}">
+      </div>
+      <div class="form-field">
+        <span>售后人员</span>
+        <input name="handler" type="text" placeholder="如 张师傅" value="${escapeHtml(handler)}">
+      </div>
+      <div class="form-field">
+        <span>备注</span>
+        <input name="note" type="text" placeholder="补充信息" value="${escapeHtml(note)}">
+      </div>
+      <div class="form-field">
+        <span>理赔状态</span>
+        <div class="segmented four" id="warrantyStatusSegmented">${statusButtons}</div>
+        <input type="hidden" name="warrantyStatus" id="warrantyStatusInput" value="${status}">
+      </div>
+      <p class="form-error" id="warrantyFormError" hidden></p>
+      <div class="form-actions">
+        <button class="button" type="button" data-action="close-sheet">取消</button>
+        <button class="button primary" type="submit">${isEdit ? '保存修改' : '确认新增'}</button>
+      </div>
+    </form>`);
+  }
   function filteredProducts() {
     const query = searchQuery.trim().toLowerCase();
     return state.products
@@ -2443,6 +2546,7 @@ svg {
       products: state.products.map(product => includeImages ? product : { ...product, image: '' }),
       transactions: state.transactions,
       accounting: state.accounting,
+      warrantyTires: state.warrantyTires,
       settings: { ...state.settings },
       updatedAt: state.updatedAt
     };
@@ -2727,6 +2831,14 @@ svg {
     if (action === 'import-sync-file') openImportSyncFile();
     if (action === 'show-tire-sales') showTireSalesDetail();
     if (action === 'toggle-sales-view') { homeSalesView = actionButton.dataset.period; homeSalesSelectedMonth = ''; showTireSalesDetail(); }
+    if (action === 'show-warranty') showWarrantyList();
+    if (action === 'add-warranty') showWarrantyForm();
+    if (action === 'edit-warranty') showWarrantyForm(actionButton.dataset.id);
+    if (action === 'set-warranty-status') {
+      const statusInput = document.getElementById('warrantyStatusInput');
+      if (statusInput) statusInput.value = actionButton.dataset.status;
+      document.querySelectorAll('[data-action="set-warranty-status"]').forEach(b => b.classList.toggle('is-active', b === actionButton));
+    }
     if (action === 'view-transaction-detail') {
       const id = actionButton.dataset.id;
       const tx = state.transactions.find(t => t.id === id);
@@ -3259,6 +3371,37 @@ svg {
       render();
       const hint = isIncome && paymentStatus === 'pending' ? '（已挂账）' : '';
       showToast(`${isIncome ? '收入' : '支出'}${isEdit ? '已修改' : '已记录'}${hint}`);
+    }
+
+    // ----- 三包胎表单 -----
+    if (form.id === 'warrantyForm') {
+      const data = new FormData(form);
+      const tireNo = String(data.get('tireNo') || '').trim();
+      const spec = String(data.get('spec') || '').trim();
+      const brand = String(data.get('brand') || '').trim();
+      const defect = String(data.get('defect') || '').trim();
+      const handler = String(data.get('handler') || '').trim();
+      const note = String(data.get('note') || '').trim();
+      const status = String(data.get('warrantyStatus') || 'pending');
+      const warrantyId = String(data.get('warrantyId') || '');
+      const error = document.getElementById('warrantyFormError');
+      if (!tireNo || !spec || !brand || !defect) {
+        if (error) { error.hidden = false; error.textContent = '请填写胎号、型号、品牌和病象。'; }
+        return;
+      }
+      const ts = nowISO();
+      if (warrantyId) {
+        const idx = state.warrantyTires.findIndex(w => w.id === warrantyId);
+        if (idx !== -1) {
+          state.warrantyTires[idx] = { ...state.warrantyTires[idx], tireNo, spec, brand, defect, handler, note, status, updatedAt: ts };
+        }
+      } else {
+        state.warrantyTires.unshift({ id: makeId('W'), tireNo, spec, brand, defect, handler, note, status, createdAt: ts, updatedAt: ts });
+      }
+      persist();
+      render();
+      showWarrantyList();
+      showToast(warrantyId ? '三包胎已修改' : '三包胎已新增');
     }
 
     // ----- 低库存阈值 -----
